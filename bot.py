@@ -18,7 +18,7 @@ from telegram.ext import (
 logging.basicConfig(level=logging.INFO)
 
 # ==================== CONFIGURATION ====================
-BOT_TOKEN = "8996402477:AAEt8FF2NAnWNrTyIRwGgJJcWEZoJIn2u8c"
+BOT_TOKEN = "8996402477:AAEK_pRrL1w8MXyuJXY4y7QInnNfiTlJOaw"
 ADMIN_CHAT_ID = 5785924075
 
 # MongoDB Atlas URI
