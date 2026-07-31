@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from threading import Thread
 from pymongo import MongoClient
@@ -54,7 +55,7 @@ def save_user_to_mongo(user_id, first_name, username):
     except Exception as e:
         logging.error(f"MongoDB Error: {e}")
 
-# --- KEEP-ALIVE WEB SERVER FOR RENDER ---
+# --- KEEP-ALIVE WEB SERVER FOR RENDER & UPTIMEROBOT ---
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -71,10 +72,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     chat_id = update.effective_chat.id
 
-    # 1. Save user to MongoDB Cloud
+    # 1. User Mongo Cloud me save hoga
     save_user_to_mongo(user.id, user.first_name, user.username)
 
-    # 2. Welcome Message with Dynamic User Name
+    # 2. Dynamic Name Welcome Message
     welcome_text = (
         f"Welcome ( {user.first_name} ) ❤️‍🔥🔮\n\n"
         f"Yrr aapne colour trading me aaj tak kitna bhi loss kia ho no problem sab recover ho jayega\n\n"
@@ -117,7 +118,7 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             message_id=APK_MSG_ID
         )
 
-# Total Users Check Command for Admin
+# Total Users Check Command for Admin (/stats)
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == ADMIN_CHAT_ID:
         total_users = users_collection.count_documents({})
@@ -127,6 +128,13 @@ def main():
     # Start Keep-Alive Web Server Thread
     Thread(target=run_web_server, daemon=True).start()
 
+    # Asyncio Event Loop Fix for Render Server
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
     # Telegram Bot App
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
@@ -135,7 +143,7 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_button))
 
     print("Bot is running with MongoDB integration...")
-    app.run_polling()
+    app.run_polling(close_loop=False)
 
 if __name__ == "__main__":
     main()
