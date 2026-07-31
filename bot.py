@@ -25,7 +25,6 @@ ADMIN_CHAT_ID = 5785924075
 # MongoDB Atlas URI
 MONGO_URI = "mongodb+srv://kiroriwalsaab76_db_user:Vijay786482@cluster0.5isln6k.mongodb.net/?appName=Cluster0"
 
-
 # Source Chat & Message IDs
 SOURCE_CHAT_ID = 5785924075
 WELCOME_MSG_ID = 31      # Text Welcome
@@ -123,7 +122,6 @@ async def handle_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Welcome content bhejna aur video wale message ko pin karna
     await send_welcome_content(context, user.id, user.first_name)
     
-    # Optional: Agar request approve bhi karni ho toh yahan function aa sakta hai (aapke code ke hisab se)
     try:
         await request.approve()
     except Exception:
@@ -144,7 +142,7 @@ def main():
 
     # Bot Start karo
     logging.info("Bot is starting...")
-    application.run_polling()
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
