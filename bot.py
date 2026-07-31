@@ -1,20 +1,29 @@
-import sqlite3
+import os
+import asyncio
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from threading import Thread
 from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder,
-    MessageHandler,
-    ContextTypes,
-    filters,
-)
+from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
+
+# Dummy Web Server for Render Web Service Port Check
+class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is Running Alive!")
+
+def run_web_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), SimpleHTTPRequestHandler)
+    server.serve_forever()
 
 # ==================== CONFIGURATION ====================
-BOT_TOKEN = "8996402477:AAEt8FF2NAnWNrTyIRwGgJJcWEZoJIn2u8c"  # Yahan apna BotFather se mila Token daalein
-ADMIN_ID = 5785924075  # Aapki User ID set kar di hai!
+BOT_TOKEN = "8996402477:AAEt8FF2NAnWNrTyIRwGgJJcWEZoJIn2u8c"  # Aapka Bot Token yahan daalein
+ADMIN_ID = 5785924075
 # =======================================================
 
 async def get_ids(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Sirf Admin jab koi bhi message/media bhejega tabhi ID milegi
-    if update.effective_user.id == ADMIN_ID:
+    if update.effective_user and update.effective_user.id == ADMIN_ID:
         chat_id = update.effective_chat.id
         msg_id = update.message.message_id
         
@@ -22,11 +31,14 @@ async def get_ids(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"✅ **Message Saved in Bot History!**\n\n"
             f"🆔 **CHAT_ID:** `{chat_id}`\n"
             f"📩 **MSG_ID:** `{msg_id}`\n\n"
-            f"👉 Is MSG_ID ko yaad rakhna, hum direct welcome message me use karenge!"
+            f"👉 Is MSG_ID ko yaad rakhna!"
         )
         await update.message.reply_text(reply_text, parse_mode="Markdown")
 
 def main():
+    # Web server start karein taaki Render port error na de
+    Thread(target=run_web_server, daemon=True).start()
+    
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.ALL, get_ids))
     print("ID Extractor Bot Started...")
@@ -34,4 +46,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-  
+    
