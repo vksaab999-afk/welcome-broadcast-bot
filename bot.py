@@ -19,7 +19,6 @@ from telegram.ext import (
 logging.basicConfig(level=logging.INFO)
 
 # ==================== CONFIGURATION ====================
-# Telegram BotFather se NAYA Valid Token yahan daalo
 BOT_TOKEN = "8996402477:AAEK_pRrL1w8MXyuJXY4y7QInnNfiTlJOaw" 
 ADMIN_CHAT_ID = 5785924075
 
@@ -74,7 +73,7 @@ async def send_welcome_content(context: ContextTypes.DEFAULT_TYPE, user_id: int,
     try:
         # 1. Welcome Text with Name
         welcome_text = (
-            f"Welcome {first_name}  ❤️‍🔥\n\n"
+            f"Welcome {first_name} ❤️‍🔥\n\n"
             f"Yrr aapne colour trading me aaj tak kitna bhi loss kia ho no problem sab recover ho jayega\n\n"
             f"100%\n\n"
             f"Niche ka video pura dekho or paisa chapo 💸\n"
@@ -110,13 +109,13 @@ async def handle_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE
     request = update.chat_join_request
     user = request.from_user
     
-    # 1. Save user details to MongoDB
+    # Save user details to MongoDB
     save_user_to_mongo(user.id, user.first_name, user.username)
 
-    # 2. Send Welcome Content in DM immediately
+    # Send Welcome Content in DM immediately
     await send_welcome_content(context, user.id, user.first_name)
 
-# --- START COMMAND (Fallback) ---
+# --- START COMMAND ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     save_user_to_mongo(user.id, user.first_name, user.username)
@@ -134,51 +133,44 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             message_id=APK_MSG_ID
         )
 
-# --- DIRECT ADMIN BROADCAST HANDLER (FIXED) ---
-async def admin_auto_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Only Admin can trigger this
+# --- AUTOMATIC ADMIN FORWARD BROADCAST (EXACT SAME MESSAGE & EMOJIS) ---
+async def auto_broadcast_admin_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message
+    
+    # Sirf Admin ki chat se aane wale messages par kaam karega
     if update.effective_user.id != ADMIN_CHAT_ID:
         return
 
-    msg = update.message
-
-    # Skip if it's a command
+    # Agar koi command ho (jaise /stats) toh usko ignore kare
     if msg.text and msg.text.startswith("/"):
         return
 
     users = list(users_collection.find({}, {"user_id": 1}))
     total_users = len(users)
-    
+
     if total_users == 0:
-        await msg.reply_text("⚠️ **Database me abhi koi user nahi hai.**", parse_mode="Markdown")
+        await msg.reply_text("⚠️ **Database me abhi koi user saved nahi hai!**")
         return
 
-    status_msg = await msg.reply_text(f"🚀 **Broadcasting to {total_users} users...**", parse_mode="Markdown")
-    
     success_count = 0
     failed_count = 0
 
-    for user in users:
-        u_id = user["user_id"]
+    for u in users:
+        u_id = u["user_id"]
         try:
-            # Fixed: Properly copying message from Admin chat to each user
-            await context.bot.copy_message(
+            # forward_message use kar rahe hain taaki Premium Icons aur Formatting bilkul original rahe
+            await context.bot.forward_message(
                 chat_id=u_id,
                 from_chat_id=ADMIN_CHAT_ID,
                 message_id=msg.message_id
             )
             success_count += 1
-            await asyncio.sleep(0.05)  # Telegram Rate Limit protection
+            await asyncio.sleep(0.05)  # Telegram Rate Limit
         except Exception as e:
             failed_count += 1
-            logging.error(f"Failed to send broadcast to {u_id}: {e}")
+            logging.error(f"Failed to forward to {u_id}: {e}")
 
-    await status_msg.edit_text(
-        f"✅ **Broadcast Completed!**\n\n"
-        f"✔️ Delivered: `{success_count}`\n"
-        f"❌ Failed: `{failed_count}`",
-        parse_mode="Markdown"
-    )
+    await msg.reply_text(f"✅ Forwarded to `{success_count}` users (Failed: `{failed_count}`)", parse_mode="Markdown")
 
 # --- ADMIN STATS COMMAND ---
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -187,7 +179,7 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"📊 **Total Registered Users in MongoDB:** `{total_users}`", parse_mode="Markdown")
 
 def main():
-    # Start Keep-Alive Web Server Thread
+    # Keep-Alive Web Server Thread
     Thread(target=run_web_server, daemon=True).start()
 
     # Asyncio Event Loop Fix
@@ -206,12 +198,11 @@ def main():
     app.add_handler(ChatJoinRequestHandler(handle_join_request))
     app.add_handler(CallbackQueryHandler(handle_button))
     
-    # Direct Auto Broadcast Handler for Admin
-    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, admin_auto_broadcast))
+    # Direct Forward Message Handler for Admin
+    app.add_handler(MessageHandler(filters.Chat(ADMIN_CHAT_ID) & ~filters.COMMAND, auto_broadcast_admin_messages))
 
     print("Bot is running...")
     app.run_polling(close_loop=False)
 
 if __name__ == "__main__":
     main()
-        
