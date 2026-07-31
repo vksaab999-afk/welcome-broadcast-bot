@@ -74,7 +74,7 @@ async def send_welcome_content(context: ContextTypes.DEFAULT_TYPE, user_id: int,
     try:
         # 1. Welcome Text with Name
         welcome_text = (
-            f"Welcome ( {first_name} ) ❤️‍🔥🔮\n\n"
+            f"Welcome {first_name}  ❤️‍🔥\n\n"
             f"Yrr aapne colour trading me aaj tak kitna bhi loss kia ho no problem sab recover ho jayega\n\n"
             f"100%\n\n"
             f"Niche ka video pura dekho or paisa chapo 💸\n"
@@ -105,18 +105,18 @@ async def send_welcome_content(context: ContextTypes.DEFAULT_TYPE, user_id: int,
     except Exception as e:
         logging.error(f"Could not send welcome content to user {user_id}: {e}")
 
-# --- JOIN REQUEST HANDLER (NO AUTO-ACCEPT, JUST SEND MSG) ---
+# --- JOIN REQUEST HANDLER ---
 async def handle_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     request = update.chat_join_request
     user = request.from_user
     
-    # 1. MongoDB me User details Save karo
+    # 1. Save user details to MongoDB
     save_user_to_mongo(user.id, user.first_name, user.username)
 
-    # 2. Direct DM me Messages Bhejo
+    # 2. Send Welcome Content in DM immediately
     await send_welcome_content(context, user.id, user.first_name)
 
-# --- START COMMAND (Direct start fallback) ---
+# --- START COMMAND (Fallback) ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     save_user_to_mongo(user.id, user.first_name, user.username)
@@ -134,7 +134,7 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             message_id=APK_MSG_ID
         )
 
-# --- DIRECT ADMIN BROADCAST HANDLER (AUTOMATIC FORWARD TO ALL USERS) ---
+# --- DIRECT ADMIN BROADCAST HANDLER (FIXED) ---
 async def admin_auto_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Only Admin can trigger this
     if update.effective_user.id != ADMIN_CHAT_ID:
@@ -142,7 +142,7 @@ async def admin_auto_broadcast(update: Update, context: ContextTypes.DEFAULT_TYP
 
     msg = update.message
 
-    # Skip if it is a command like /stats or /start
+    # Skip if it's a command
     if msg.text and msg.text.startswith("/"):
         return
 
@@ -161,20 +161,20 @@ async def admin_auto_broadcast(update: Update, context: ContextTypes.DEFAULT_TYP
     for user in users:
         u_id = user["user_id"]
         try:
-            # Copy exact message with media, caption, formatting, buttons etc.
+            # Fixed: Properly copying message from Admin chat to each user
             await context.bot.copy_message(
                 chat_id=u_id,
-                from_chat_id=msg.chat_id,
+                from_chat_id=ADMIN_CHAT_ID,
                 message_id=msg.message_id
             )
             success_count += 1
-            await asyncio.sleep(0.05)  # Telegram Rate-limit Protection
+            await asyncio.sleep(0.05)  # Telegram Rate Limit protection
         except Exception as e:
             failed_count += 1
-            logging.error(f"Failed to send to {u_id}: {e}")
+            logging.error(f"Failed to send broadcast to {u_id}: {e}")
 
     await status_msg.edit_text(
-        f"✅ **Broadcast Done!**\n\n"
+        f"✅ **Broadcast Completed!**\n\n"
         f"✔️ Delivered: `{success_count}`\n"
         f"❌ Failed: `{failed_count}`",
         parse_mode="Markdown"
@@ -206,7 +206,7 @@ def main():
     app.add_handler(ChatJoinRequestHandler(handle_join_request))
     app.add_handler(CallbackQueryHandler(handle_button))
     
-    # Direct Auto Broadcast Handler for Admin (Handles all message types: Text, Photo, Video, Audio, Doc, etc.)
+    # Direct Auto Broadcast Handler for Admin
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, admin_auto_broadcast))
 
     print("Bot is running...")
@@ -214,3 +214,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+        
