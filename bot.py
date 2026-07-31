@@ -23,7 +23,8 @@ BOT_TOKEN = "8996402477:AAEK_pRrL1w8MXyuJXY4y7QInnNfiTlJOaw"
 ADMIN_CHAT_ID = 5785924075
 
 # MongoDB Atlas URI
-MONGO_URI = "mongodb+srv://kiror1walsaab76_db_user:2pv87iabNqubraPX@cluster0.5isln6k.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+MONGO_URI = "mongodb+srv://kiroriwalsaab76_db_user:Vijay786482@cluster0.5isln6k.mongodb.net/?appName=Cluster0"
+
 
 # Source Chat & Message IDs
 SOURCE_CHAT_ID = 5785924075
