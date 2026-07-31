@@ -7,12 +7,8 @@ from pymongo import MongoClient
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
-    CommandHandler,
     ChatJoinRequestHandler,
-    CallbackQueryHandler,
-    MessageHandler,
     ContextTypes,
-    filters,
 )
 
 # Logging Setup
@@ -86,7 +82,7 @@ async def send_welcome_content(context: ContextTypes.DEFAULT_TYPE, user_id: int,
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        # Doosra message (Tutorial Video + Buttons) jo bheja ja raha hai
+        # Doosra message (Tutorial Video + Buttons) copy karna
         sent_video_msg = await context.bot.copy_message(
             chat_id=user_id,
             from_chat_id=SOURCE_CHAT_ID,
@@ -103,6 +99,7 @@ async def send_welcome_content(context: ContextTypes.DEFAULT_TYPE, user_id: int,
         except Exception as pin_err:
             logging.error(f"Could not pin message for user {user_id}: {pin_err}")
 
+        # Teesra message (Audio Note)
         await context.bot.copy_message(
             chat_id=user_id,
             from_chat_id=SOURCE_CHAT_ID,
@@ -119,7 +116,7 @@ async def handle_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE
     # User ko database me save karna
     save_user_to_mongo(user.id, user.first_name, user.username)
     
-    # Welcome content bhejna aur video wale message ko pin karna
+    # Welcome content bhejna aur doosre video wale message ko pin karna
     await send_welcome_content(context, user.id, user.first_name)
     
     try:
@@ -146,3 +143,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
