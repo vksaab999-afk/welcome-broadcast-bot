@@ -8,8 +8,9 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
-    MessageHandler,
+    ChatJoinRequestHandler,
     CallbackQueryHandler,
+    MessageHandler,
     ContextTypes,
     filters,
 )
@@ -18,7 +19,8 @@ from telegram.ext import (
 logging.basicConfig(level=logging.INFO)
 
 # ==================== CONFIGURATION ====================
-BOT_TOKEN = "8996402477:AAEK_pRrL1w8MXyuJXY4y7QInnNfiTlJOaw"
+# Telegram BotFather se NAYA Valid Token yahan daalo
+BOT_TOKEN = "8996402477:AAEK_pRrL1w8MXyuJXY4y7QInnNfiTlJOaw" 
 ADMIN_CHAT_ID = 5785924075
 
 # MongoDB Atlas URI
@@ -67,58 +69,118 @@ def run_web_server():
     server = HTTPServer(("0.0.0.0", port), SimpleHTTPRequestHandler)
     server.serve_forever()
 
-# --- BOT HANDLERS ---
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    chat_id = update.effective_chat.id
+# --- WELCOME MESSAGES SENDER FUNCTION ---
+async def send_welcome_content(context: ContextTypes.DEFAULT_TYPE, user_id: int, first_name: str):
+    try:
+        # 1. Welcome Text with Name
+        welcome_text = (
+            f"Welcome ( {first_name} ) ❤️‍🔥🔮\n\n"
+            f"Yrr aapne colour trading me aaj tak kitna bhi loss kia ho no problem sab recover ho jayega\n\n"
+            f"100%\n\n"
+            f"Niche ka video pura dekho or paisa chapo 💸\n"
+            f"⬇️⬇️⬇️⬇️⬇️⬇️⬇️⬇️⬇️"
+        )
+        await context.bot.send_message(chat_id=user_id, text=welcome_text)
 
-    # 1. User Mongo Cloud me save hoga
+        # 2. Video Post with Buttons
+        keyboard = [
+            [InlineKeyboardButton("Download Vip Hack 📥", callback_data="download_hack")],
+            [InlineKeyboardButton("Registration Link 🔗", url=REGISTRATION_LINK)]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await context.bot.copy_message(
+            chat_id=user_id,
+            from_chat_id=SOURCE_CHAT_ID,
+            message_id=VIDEO_MSG_ID,
+            reply_markup=reply_markup
+        )
+
+        # 3. Audio Post
+        await context.bot.copy_message(
+            chat_id=user_id,
+            from_chat_id=SOURCE_CHAT_ID,
+            message_id=AUDIO_MSG_ID
+        )
+    except Exception as e:
+        logging.error(f"Could not send welcome content to user {user_id}: {e}")
+
+# --- JOIN REQUEST HANDLER (NO AUTO-ACCEPT, JUST SEND MSG) ---
+async def handle_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    request = update.chat_join_request
+    user = request.from_user
+    
+    # 1. MongoDB me User details Save karo
     save_user_to_mongo(user.id, user.first_name, user.username)
 
-    # 2. Dynamic Name Welcome Message
-    welcome_text = (
-        f"Welcome ( {user.first_name} ) ❤️‍🔥🔮\n\n"
-        f"Yrr aapne colour trading me aaj tak kitna bhi loss kia ho no problem sab recover ho jayega\n\n"
-        f"100%\n\n"
-        f"Niche ka video pura dekho or paisa chapo 😎💸\n"
-        f"⬇️⬇️⬇️⬇️⬇️⬇️⬇️⬇️⬇️"
-    )
-    await context.bot.send_message(chat_id=chat_id, text=welcome_text)
+    # 2. Direct DM me Messages Bhejo
+    await send_welcome_content(context, user.id, user.first_name)
 
-    # 3. Video Post (MSG_ID: 33) with Buttons
-    keyboard = [
-        [InlineKeyboardButton("Download Vip Hack 📥", callback_data="download_hack")],
-        [InlineKeyboardButton("Registration Link 🔗", url=REGISTRATION_LINK)]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+# --- START COMMAND (Direct start fallback) ---
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    save_user_to_mongo(user.id, user.first_name, user.username)
+    await send_welcome_content(context, user.id, user.first_name)
 
-    await context.bot.copy_message(
-        chat_id=chat_id,
-        from_chat_id=SOURCE_CHAT_ID,
-        message_id=VIDEO_MSG_ID,
-        reply_markup=reply_markup
-    )
-
-    # 4. Audio Post (MSG_ID: 35)
-    await context.bot.copy_message(
-        chat_id=chat_id,
-        from_chat_id=SOURCE_CHAT_ID,
-        message_id=AUDIO_MSG_ID
-    )
-
+# --- BUTTON HANDLER FOR VIP HACK FILE ---
 async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     if query.data == "download_hack":
-        # APK File Forward (MSG_ID: 37)
         await context.bot.copy_message(
             chat_id=query.message.chat_id,
             from_chat_id=SOURCE_CHAT_ID,
             message_id=APK_MSG_ID
         )
 
-# Total Users Check Command for Admin (/stats)
+# --- DIRECT ADMIN BROADCAST HANDLER (AUTOMATIC FORWARD TO ALL USERS) ---
+async def admin_auto_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Only Admin can trigger this
+    if update.effective_user.id != ADMIN_CHAT_ID:
+        return
+
+    msg = update.message
+
+    # Skip if it is a command like /stats or /start
+    if msg.text and msg.text.startswith("/"):
+        return
+
+    users = list(users_collection.find({}, {"user_id": 1}))
+    total_users = len(users)
+    
+    if total_users == 0:
+        await msg.reply_text("⚠️ **Database me abhi koi user nahi hai.**", parse_mode="Markdown")
+        return
+
+    status_msg = await msg.reply_text(f"🚀 **Broadcasting to {total_users} users...**", parse_mode="Markdown")
+    
+    success_count = 0
+    failed_count = 0
+
+    for user in users:
+        u_id = user["user_id"]
+        try:
+            # Copy exact message with media, caption, formatting, buttons etc.
+            await context.bot.copy_message(
+                chat_id=u_id,
+                from_chat_id=msg.chat_id,
+                message_id=msg.message_id
+            )
+            success_count += 1
+            await asyncio.sleep(0.05)  # Telegram Rate-limit Protection
+        except Exception as e:
+            failed_count += 1
+            logging.error(f"Failed to send to {u_id}: {e}")
+
+    await status_msg.edit_text(
+        f"✅ **Broadcast Done!**\n\n"
+        f"✔️ Delivered: `{success_count}`\n"
+        f"❌ Failed: `{failed_count}`",
+        parse_mode="Markdown"
+    )
+
+# --- ADMIN STATS COMMAND ---
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == ADMIN_CHAT_ID:
         total_users = users_collection.count_documents({})
@@ -128,7 +190,7 @@ def main():
     # Start Keep-Alive Web Server Thread
     Thread(target=run_web_server, daemon=True).start()
 
-    # Asyncio Event Loop Fix for Render Server
+    # Asyncio Event Loop Fix
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:
@@ -138,13 +200,17 @@ def main():
     # Telegram Bot App
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
+    # Handlers Registration
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("stats", stats))
+    app.add_handler(ChatJoinRequestHandler(handle_join_request))
     app.add_handler(CallbackQueryHandler(handle_button))
+    
+    # Direct Auto Broadcast Handler for Admin (Handles all message types: Text, Photo, Video, Audio, Doc, etc.)
+    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, admin_auto_broadcast))
 
-    print("Bot is running with MongoDB integration...")
+    print("Bot is running...")
     app.run_polling(close_loop=False)
 
 if __name__ == "__main__":
     main()
-    
