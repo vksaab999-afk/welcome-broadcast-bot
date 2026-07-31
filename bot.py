@@ -56,7 +56,7 @@ def save_user_to_mongo(user_id, first_name, username):
     except Exception as e:
         logging.error(f"MongoDB Error: {e}")
 
-# --- KEEP-ALIVE WEB SERVER FOR RENDER & UPTIMEROBOT ---
+# --- KEEP-ALIVE WEB SERVER ---
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -71,17 +71,15 @@ def run_web_server():
 # --- WELCOME MESSAGES SENDER FUNCTION ---
 async def send_welcome_content(context: ContextTypes.DEFAULT_TYPE, user_id: int, first_name: str):
     try:
-        # 1. Welcome Text with Name
         welcome_text = (
             f"Welcome {first_name} ❤️‍🔥\n\n"
             f"Yrr aapne colour trading me aaj tak kitna bhi loss kia ho no problem sab recover ho jayega\n\n"
             f"100%\n\n"
-            f"Niche ka video pura dekho or paisa chapo 💸\n"
+            f"Niche ka video pura dekho or paisa chapo💸\n"
             f"⬇️⬇️⬇️⬇️⬇️⬇️⬇️⬇️⬇️"
         )
         await context.bot.send_message(chat_id=user_id, text=welcome_text)
 
-        # 2. Video Post with Buttons
         keyboard = [
             [InlineKeyboardButton("Download Vip Hack 📥", callback_data="download_hack")],
             [InlineKeyboardButton("Registration Link 🔗", url=REGISTRATION_LINK)]
@@ -95,7 +93,6 @@ async def send_welcome_content(context: ContextTypes.DEFAULT_TYPE, user_id: int,
             reply_markup=reply_markup
         )
 
-        # 3. Audio Post
         await context.bot.copy_message(
             chat_id=user_id,
             from_chat_id=SOURCE_CHAT_ID,
@@ -108,11 +105,7 @@ async def send_welcome_content(context: ContextTypes.DEFAULT_TYPE, user_id: int,
 async def handle_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     request = update.chat_join_request
     user = request.from_user
-    
-    # Save user details to MongoDB
     save_user_to_mongo(user.id, user.first_name, user.username)
-
-    # Send Welcome Content in DM immediately
     await send_welcome_content(context, user.id, user.first_name)
 
 # --- START COMMAND ---
@@ -121,11 +114,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_user_to_mongo(user.id, user.first_name, user.username)
     await send_welcome_content(context, user.id, user.first_name)
 
-# --- BUTTON HANDLER FOR VIP HACK FILE ---
+# --- BUTTON HANDLER ---
 async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
     if query.data == "download_hack":
         await context.bot.copy_message(
             chat_id=query.message.chat_id,
@@ -133,73 +125,106 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             message_id=APK_MSG_ID
         )
 
-# --- AUTOMATIC ADMIN FORWARD BROADCAST (EXACT SAME MESSAGE & EMOJIS) ---
-async def auto_broadcast_admin_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = update.message
-    
-    # Sirf Admin ki chat se aane wale messages par kaam karega
-    if update.effective_user.id != ADMIN_CHAT_ID:
-        return
-
-    # Agar koi command ho (jaise /stats) toh usko ignore kare
-    if msg.text and msg.text.startswith("/"):
-        return
-
+# --- BROADCAST LOGIC (DOOSRE MESSAGE YA REPLY PAR BHI KAAM KAREGA) ---
+async def execute_broadcast(message_to_broadcast, context, admin_chat_id):
     users = list(users_collection.find({}, {"user_id": 1}))
     total_users = len(users)
 
     if total_users == 0:
-        await msg.reply_text("⚠️ **Database me abhi koi user saved nahi hai!**")
+        await context.bot.send_message(chat_id=admin_chat_id, text="⚠️ Database me koi user nahi hai!")
         return
 
-    success_count = 0
-    failed_count = 0
+    success = 0
+    failed = 0
 
     for u in users:
         u_id = u["user_id"]
         try:
-            # forward_message use kar rahe hain taaki Premium Icons aur Formatting bilkul original rahe
-            await context.bot.forward_message(
-                chat_id=u_id,
-                from_chat_id=ADMIN_CHAT_ID,
-                message_id=msg.message_id
-            )
-            success_count += 1
-            await asyncio.sleep(0.05)  # Telegram Rate Limit
+            if message_to_broadcast.text:
+                await context.bot.send_message(chat_id=u_id, text=message_to_broadcast.text, entities=message_to_broadcast.entities)
+            elif message_to_broadcast.photo:
+                await context.bot.send_photo(chat_id=u_id, photo=message_to_broadcast.photo[-1].file_id, caption=message_to_broadcast.caption, caption_entities=message_to_broadcast.caption_entities)
+            elif message_to_broadcast.video:
+                await context.bot.send_video(chat_id=u_id, video=message_to_broadcast.video.file_id, caption=message_to_broadcast.caption, caption_entities=message_to_broadcast.caption_entities)
+            elif message_to_broadcast.audio:
+                await context.bot.send_audio(chat_id=u_id, audio=message_to_broadcast.audio.file_id, caption=message_to_broadcast.caption, caption_entities=message_to_broadcast.caption_entities)
+            elif message_to_broadcast.voice:
+                await context.bot.send_voice(chat_id=u_id, voice=message_to_broadcast.voice.file_id, caption=message_to_broadcast.caption, caption_entities=message_to_broadcast.caption_entities)
+            elif message_to_broadcast.document:
+                await context.bot.send_document(chat_id=u_id, document=message_to_broadcast.document.file_id, caption=message_to_broadcast.caption, caption_entities=message_to_broadcast.caption_entities)
+            
+            success += 1
+            await asyncio.sleep(0.04)
         except Exception as e:
-            failed_count += 1
-            logging.error(f"Failed to forward to {u_id}: {e}")
+            failed += 1
+            logging.error(f"Error sending to {u_id}: {e}")
 
-    await msg.reply_text(f"✅ Forwarded to `{success_count}` users (Failed: `{failed_count}`)", parse_mode="Markdown")
+    await context.bot.send_message(
+        chat_id=admin_chat_id, 
+        text=f"✅ **Broadcast Done!**\nSent: `{success}` | Failed: `{failed}`", 
+        parse_mode="Markdown"
+    )
 
-# --- ADMIN STATS COMMAND ---
+# --- 1. DIRECT AUTOMATIC BROADCAST (AGAR BINA COMMAND KE BHEJNA HO) ---
+async def auto_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message
+    if update.effective_user.id != ADMIN_CHAT_ID:
+        return
+    if msg.text and msg.text.startswith("/"):
+        return
+    await execute_broadcast(msg, context, ADMIN_CHAT_ID)
+
+# --- 2. COMMAND BASED BROADCAST (/broadcast likh kar reply karne par) ---
+async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message
+    if update.effective_user.id != ADMIN_CHAT_ID:
+        return
+
+    # Agar kisi message par reply karke /broadcast likha hai
+    if msg.reply_to_message:
+        await execute_broadcast(msg.reply_to_message, context, ADMIN_CHAT_ID)
+    else:
+        # Agar text ke sath likha hai jaise "/broadcast Hello"
+        text_after_command = msg.text.replace("/broadcast", "").strip()
+        if text_after_command:
+            users = list(users_collection.find({}, {"user_id": 1}))
+            success = 0
+            for u in users:
+                try:
+                    await context.bot.send_message(chat_id=u["user_id"], text=text_after_command)
+                    success += 1
+                    await asyncio.sleep(0.04)
+                except:
+                    pass
+            await msg.reply_text(f"✅ Sent to {success} users!")
+        else:
+            await msg.reply_text("⚠️ Kripya message ke sath /broadcast likhein ya kisi message par reply karke /broadcast bhejein.")
+
+# --- STATS COMMAND ---
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == ADMIN_CHAT_ID:
         total_users = users_collection.count_documents({})
-        await update.message.reply_text(f"📊 **Total Registered Users in MongoDB:** `{total_users}`", parse_mode="Markdown")
+        await update.message.reply_text(f"📊 **Total Users:** `{total_users}`", parse_mode="Markdown")
 
 def main():
-    # Keep-Alive Web Server Thread
     Thread(target=run_web_server, daemon=True).start()
 
-    # Asyncio Event Loop Fix
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-    # Telegram Bot App
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Handlers Registration
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("stats", stats))
+    app.add_handler(CommandHandler("broadcast", broadcast_command))
     app.add_handler(ChatJoinRequestHandler(handle_join_request))
     app.add_handler(CallbackQueryHandler(handle_button))
     
-    # Direct Forward Message Handler for Admin
-    app.add_handler(MessageHandler(filters.Chat(ADMIN_CHAT_ID) & ~filters.COMMAND, auto_broadcast_admin_messages))
+    # Direct Message Handler
+    app.add_handler(MessageHandler(filters.Chat(ADMIN_CHAT_ID) & ~filters.COMMAND, auto_broadcast))
 
     print("Bot is running...")
     app.run_polling(close_loop=False)
