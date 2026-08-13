@@ -25,7 +25,6 @@ ADMIN_CHAT_ID = 5785924075
 # MongoDB Atlas URI
 MONGO_URI = "mongodb+srv://kiroriwalsaab76_db_user:Vijay786482@cluster0.5isln6k.mongodb.net/?appName=Cluster0"
 
-
 # Source Chat & Message IDs
 SOURCE_CHAT_ID = 5785924075
 WELCOME_MSG_ID = 31      # Text Welcome
@@ -126,7 +125,7 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             message_id=APK_MSG_ID
         )
 
-# --- BROADCAST LOGIC (DOOSRE MESSAGE YA REPLY PAR BHI KAAM KAREGA) ---
+# --- BULLET-PROOF BROADCAST LOGIC (FOR 50k+ USERS) ---
 async def execute_broadcast(message_to_broadcast, context, admin_chat_id):
     users = list(users_collection.find({}, {"user_id": 1}))
     total_users = len(users)
@@ -138,7 +137,12 @@ async def execute_broadcast(message_to_broadcast, context, admin_chat_id):
     success = 0
     failed = 0
 
-    for u in users:
+    progress_msg = await context.bot.send_message(
+        chat_id=admin_chat_id, 
+        text=f"🚀 **Broadcast Started!**\nTotal Users: `{total_users}`\nPlease wait..."
+    )
+
+    for index, u in enumerate(users):
         u_id = u["user_id"]
         try:
             if message_to_broadcast.text:
@@ -155,18 +159,30 @@ async def execute_broadcast(message_to_broadcast, context, admin_chat_id):
                 await context.bot.send_document(chat_id=u_id, document=message_to_broadcast.document.file_id, caption=message_to_broadcast.caption, caption_entities=message_to_broadcast.caption_entities)
             
             success += 1
-            await asyncio.sleep(0.04)
         except Exception as e:
             failed += 1
             logging.error(f"Error sending to {u_id}: {e}")
 
-    await context.bot.send_message(
-        chat_id=admin_chat_id, 
-        text=f"✅ **Broadcast Done!**\nSent: `{success}` | Failed: `{failed}`", 
-        parse_mode="Markdown"
-    )
+        # Telegram limit protect karne ke liye delay (Har 30 messages ke baad thoda extra rest taaki FloodWait na aaye)
+        await asyncio.sleep(0.05)
+        if index > 0 and index % 30 == 0:
+            await asyncio.sleep(1.0)
 
-# --- 1. DIRECT AUTOMATIC BROADCAST (AGAR BINA COMMAND KE BHEJNA HO) ---
+    try:
+        await context.bot.edit_message_text(
+            chat_id=admin_chat_id, 
+            message_id=progress_msg.message_id,
+            text=f"✅ **Broadcast Completed!**\n\n👥 Total: `{total_users}`\n🚀 Sent: `{success}`\n❌ Failed: `{failed}`", 
+            parse_mode="Markdown"
+        )
+    except:
+        await context.bot.send_message(
+            chat_id=admin_chat_id, 
+            text=f"✅ **Broadcast Completed!**\n\n👥 Total: `{total_users}`\n🚀 Sent: `{success}`\n❌ Failed: `{failed}`", 
+            parse_mode="Markdown"
+        )
+
+# --- 1. DIRECT AUTOMATIC BROADCAST ---
 async def auto_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     if update.effective_user.id != ADMIN_CHAT_ID:
@@ -175,29 +191,36 @@ async def auto_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     await execute_broadcast(msg, context, ADMIN_CHAT_ID)
 
-# --- 2. COMMAND BASED BROADCAST (/broadcast likh kar reply karne par) ---
+# --- 2. COMMAND BASED BROADCAST ---
 async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     if update.effective_user.id != ADMIN_CHAT_ID:
         return
 
-    # Agar kisi message par reply karke /broadcast likha hai
     if msg.reply_to_message:
         await execute_broadcast(msg.reply_to_message, context, ADMIN_CHAT_ID)
     else:
-        # Agar text ke sath likha hai jaise "/broadcast Hello"
         text_after_command = msg.text.replace("/broadcast", "").strip()
         if text_after_command:
+            # Simple text broadcast support
             users = list(users_collection.find({}, {"user_id": 1}))
+            total_users = len(users)
             success = 0
-            for u in users:
+            failed = 0
+            
+            progress_msg = await msg.reply_text(f"🚀 Broadcast started for {total_users} users...")
+            
+            for index, u in enumerate(users):
                 try:
                     await context.bot.send_message(chat_id=u["user_id"], text=text_after_command)
                     success += 1
-                    await asyncio.sleep(0.04)
                 except:
-                    pass
-            await msg.reply_text(f"✅ Sent to {success} users!")
+                    failed += 1
+                await asyncio.sleep(0.05)
+                if index > 0 and index % 30 == 0:
+                    await asyncio.sleep(1.0)
+                    
+            await progress_msg.edit_text(f"✅ **Broadcast Completed!**\n\n👥 Total: `{total_users}`\n🚀 Sent: `{success}`\n❌ Failed: `{failed}`", parse_mode="Markdown")
         else:
             await msg.reply_text("⚠️ Kripya message ke sath /broadcast likhein ya kisi message par reply karke /broadcast bhejein.")
 
