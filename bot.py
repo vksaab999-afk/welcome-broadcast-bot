@@ -1,7 +1,7 @@
 import os
 import logging
 import asyncio
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from threading import Thread
 from pymongo import MongoClient
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -56,16 +56,22 @@ def save_user_to_mongo(user_id, first_name, username):
     except Exception as e:
         logging.error(f"MongoDB Error: {e}")
 
-# --- KEEP-ALIVE WEB SERVER ---
+# --- KEEP-ALIVE WEB SERVER (FIXED FOR UPTIMEROBOT 501 ERROR) ---
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
         self.end_headers()
         self.wfile.write(b"Bot is Live and MongoDB Connected!")
 
+    def do_HEAD(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+
 def run_web_server():
     port = int(os.environ.get("PORT", 8080))
-    server = HTTPServer(("0.0.0.0", port), SimpleHTTPRequestHandler)
+    server = ThreadingHTTPServer(("0.0.0.0", port), SimpleHTTPRequestHandler)
     server.serve_forever()
 
 # --- WELCOME MESSAGES SENDER FUNCTION ---
@@ -202,7 +208,6 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         text_after_command = msg.text.replace("/broadcast", "").strip()
         if text_after_command:
-            # Simple text broadcast support
             users = list(users_collection.find({}, {"user_id": 1}))
             total_users = len(users)
             success = 0
