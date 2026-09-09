@@ -1,10 +1,13 @@
 import os
+from dotenv import load_dotenv
 import logging
 import asyncio
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from threading import Thread
 from pymongo import MongoClient
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+load_dotenv()
+
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -19,11 +22,11 @@ from telegram.ext import (
 logging.basicConfig(level=logging.INFO)
 
 # ==================== CONFIGURATION ====================
-BOT_TOKEN = "8996402477:AAEK_pRrL1w8MXyuJXY4y7QInnNfiTlJOaw" 
-ADMIN_CHAT_ID = 5785924075
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+ADMIN_CHAT_ID = int(os.environ.get("ADMIN_CHAT_ID", "0"))
 
-# MongoDB Atlas URI
-MONGO_URI = "mongodb+srv://kiroriwalsaab76_db_user:Vijay786482@cluster0.5isln6k.mongodb.net/?appName=Cluster0"
+# MongoDB Atlas URI: keep credentials out of source control.
+MONGO_URI = os.environ.get("MONGO_URI", "")
 
 # Source Chat & Message IDs
 SOURCE_CHAT_ID = 5785924075
@@ -32,13 +35,62 @@ VIDEO_MSG_ID = 33        # Tutorial Video
 AUDIO_MSG_ID = 35        # Audio Note
 APK_MSG_ID = 37          # VIP Hack File
 
-REGISTRATION_LINK = "https://6club77.com/#/register?invitationCode=134575773989"
+TEST_BUTTON_URL = os.environ.get("TEST_BUTTON_URL", "https://6club77.com/#/register?invitationCode=134575773989")
+REGISTRATION_LINK = os.environ.get("REGISTRATION_LINK", TEST_BUTTON_URL)
+
+# Test mode: all four buttons intentionally use the same destination.
+VIP_CHANNEL_URL = os.environ.get("VIP_CHANNEL_URL", TEST_BUTTON_URL)
+FREE_GIFTCODE_URL = os.environ.get("FREE_GIFTCODE_URL", TEST_BUTTON_URL)
+PROFIT_TOOL_URL = os.environ.get("PROFIT_TOOL_URL", TEST_BUTTON_URL)
+
+# Two supplied custom emoji IDs, alternating across the four buttons.
+EMOJI_JOIN = os.environ.get("EMOJI_JOIN", "5271604874419647061")
+EMOJI_TOOL = os.environ.get("EMOJI_TOOL", "5255934767844567828")
 # =======================================================
 
 # --- MONGODB SETUP ---
-mongo_client = MongoClient(MONGO_URI)
-db = mongo_client["telegram_bot_db"]
-users_collection = db["users"]
+mongo_client = MongoClient(MONGO_URI) if MONGO_URI else None
+db = mongo_client["telegram_bot_db"] if mongo_client is not None else None
+users_collection = db["users"] if db is not None else None
+
+def styled_button(text, *, style, icon_custom_emoji_id=None, url=None, callback_data=None):
+    """Build a Bot API 9.4 styled button with a graceful older-PTB fallback.
+
+    `style` is one of primary/success/danger. Custom emoji IDs are optional.
+    The fallback keeps ordinary buttons working if python-telegram-bot is older
+    than the Bot API fields.
+    """
+    action = {"url": url} if url else {"callback_data": callback_data or "noop"}
+    modern = {"text": text, **action, "style": style}
+    if icon_custom_emoji_id:
+        modern["icon_custom_emoji_id"] = icon_custom_emoji_id
+
+    try:
+        return InlineKeyboardButton(**modern)
+    except TypeError:
+        # Recent PTB releases may expose new Bot API fields through api_kwargs.
+        api_kwargs = {"style": style}
+        if icon_custom_emoji_id:
+            api_kwargs["icon_custom_emoji_id"] = icon_custom_emoji_id
+        try:
+            return InlineKeyboardButton(text=text, api_kwargs=api_kwargs, **action)
+        except TypeError:
+            logging.warning("PTB does not support styled buttons; using plain fallback")
+            return InlineKeyboardButton(text=text, **action)
+
+
+def build_welcome_keyboard():
+    return InlineKeyboardMarkup([
+        [styled_button("JOIN VIP CHANNEL", style="primary", icon_custom_emoji_id=EMOJI_JOIN,
+                       url=VIP_CHANNEL_URL or None, callback_data="vip_channel")],
+        [styled_button("GET NUMBER SURESHOT", style="success", icon_custom_emoji_id=EMOJI_SURESHOT,
+                       url=TEST_BUTTON_URL)],
+        [styled_button("FREE GIFTCODE", style="primary", icon_custom_emoji_id=EMOJI_GIFT,
+                       url=FREE_GIFTCODE_URL or None, callback_data="free_giftcode")],
+        [styled_button("GET PROFIT TOOL APK", style="danger", icon_custom_emoji_id=EMOJI_TOOL,
+                       url=PROFIT_TOOL_URL or TEST_BUTTON_URL)],
+    ])
+
 
 def save_user_to_mongo(user_id, first_name, username):
     try:
@@ -86,11 +138,7 @@ async def send_welcome_content(context: ContextTypes.DEFAULT_TYPE, user_id: int,
         )
         await context.bot.send_message(chat_id=user_id, text=welcome_text)
 
-        keyboard = [
-            [InlineKeyboardButton("Download Vip Hack 📥", callback_data="download_hack")],
-            [InlineKeyboardButton("Registration Link 🔗", url=REGISTRATION_LINK)]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        reply_markup = build_welcome_keyboard()
 
         await context.bot.copy_message(
             chat_id=user_id,
@@ -124,12 +172,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    if query.data == "download_hack":
+    if query.data in {"download_hack", "free_giftcode"}:
         await context.bot.copy_message(
             chat_id=query.message.chat_id,
             from_chat_id=SOURCE_CHAT_ID,
             message_id=APK_MSG_ID
         )
+    elif query.data == "vip_channel":
+        await query.message.reply_text("VIP channel link is not configured yet.")
 
 # --- BULLET-PROOF BROADCAST LOGIC (FOR 50k+ USERS) ---
 async def execute_broadcast(message_to_broadcast, context, admin_chat_id):
@@ -236,6 +286,8 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"📊 **Total Users:** `{total_users}`", parse_mode="Markdown")
 
 def main():
+    if not BOT_TOKEN or not MONGO_URI or not ADMIN_CHAT_ID or users_collection is None:
+        raise RuntimeError("Set BOT_TOKEN, MONGO_URI, and ADMIN_CHAT_ID environment variables")
     Thread(target=run_web_server, daemon=True).start()
 
     try:
