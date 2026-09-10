@@ -43,9 +43,11 @@ VIP_CHANNEL_URL = os.environ.get("VIP_CHANNEL_URL", TEST_BUTTON_URL)
 FREE_GIFTCODE_URL = os.environ.get("FREE_GIFTCODE_URL", TEST_BUTTON_URL)
 PROFIT_TOOL_URL = os.environ.get("PROFIT_TOOL_URL", TEST_BUTTON_URL)
 
-# Two supplied custom emoji IDs, alternating across the four buttons.
+# Custom Emoji IDs for buttons
 EMOJI_JOIN = os.environ.get("EMOJI_JOIN", "5271604874419647061")
 EMOJI_TOOL = os.environ.get("EMOJI_TOOL", "5255934767844567828")
+EMOJI_SURESHOT = os.environ.get("EMOJI_SURESHOT", "5271604874419647061")
+EMOJI_GIFT = os.environ.get("EMOJI_GIFT", "5255934767844567828")
 # =======================================================
 
 # --- MONGODB SETUP ---
@@ -219,7 +221,6 @@ async def execute_broadcast(message_to_broadcast, context, admin_chat_id):
             failed += 1
             logging.error(f"Error sending to {u_id}: {e}")
 
-        # Telegram limit protect karne ke liye delay (Har 30 messages ke baad thoda extra rest taaki FloodWait na aaye)
         await asyncio.sleep(0.05)
         if index > 0 and index % 30 == 0:
             await asyncio.sleep(1.0)
@@ -304,7 +305,6 @@ def main():
     app.add_handler(ChatJoinRequestHandler(handle_join_request))
     app.add_handler(CallbackQueryHandler(handle_button))
     
-    # Direct Message Handler
     app.add_handler(MessageHandler(filters.Chat(ADMIN_CHAT_ID) & ~filters.COMMAND, auto_broadcast))
 
     print("Bot is running...")
