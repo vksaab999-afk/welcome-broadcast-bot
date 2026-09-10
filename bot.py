@@ -33,6 +33,10 @@ AUDIO_MSG_ID = 35        # Audio Note
 APK_MSG_ID = 37          # VIP Hack File
 
 REGISTRATION_LINK = "https://6club77.com/#/register?invitationCode=134575773989"
+
+# Custom Emoji IDs for Buttons
+EMOJI_JOIN = "5271604874419647061"
+EMOJI_TOOL = "5255934767844567828"
 # =======================================================
 
 # --- MONGODB SETUP ---
@@ -74,6 +78,24 @@ def run_web_server():
     server = ThreadingHTTPServer(("0.0.0.0", port), SimpleHTTPRequestHandler)
     server.serve_forever()
 
+# --- STYLED BUTTON HELPER ---
+def styled_button(text, *, style, icon_custom_emoji_id=None, url=None, callback_data=None):
+    action = {"url": url} if url else {"callback_data": callback_data or "noop"}
+    modern = {"text": text, **action, "style": style}
+    if icon_custom_emoji_id:
+        modern["icon_custom_emoji_id"] = icon_custom_emoji_id
+
+    try:
+        return InlineKeyboardButton(**modern)
+    except TypeError:
+        api_kwargs = {"style": style}
+        if icon_custom_emoji_id:
+            api_kwargs["icon_custom_emoji_id"] = icon_custom_emoji_id
+        try:
+            return InlineKeyboardButton(text=text, api_kwargs=api_kwargs, **action)
+        except TypeError:
+            return InlineKeyboardButton(text=text, **action)
+
 # --- WELCOME MESSAGES SENDER FUNCTION ---
 async def send_welcome_content(context: ContextTypes.DEFAULT_TYPE, user_id: int, first_name: str):
     try:
@@ -86,9 +108,10 @@ async def send_welcome_content(context: ContextTypes.DEFAULT_TYPE, user_id: int,
         )
         await context.bot.send_message(chat_id=user_id, text=welcome_text)
 
+        # 2 Buttons: Ek Green (success) aur ek Red (danger) animated icons ke sath
         keyboard = [
-            [InlineKeyboardButton("Download Vip Hack 📥", callback_data="download_hack")],
-            [InlineKeyboardButton("Registration Link 🔗", url=REGISTRATION_LINK)]
+            [styled_button("Download Vip Hack 📥", style="success", icon_custom_emoji_id=EMOJI_JOIN, callback_data="download_hack")],
+            [styled_button("Registration Link 🔗", style="danger", icon_custom_emoji_id=EMOJI_TOOL, url=REGISTRATION_LINK)]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -169,7 +192,6 @@ async def execute_broadcast(message_to_broadcast, context, admin_chat_id):
             failed += 1
             logging.error(f"Error sending to {u_id}: {e}")
 
-        # Telegram limit protect karne ke liye delay (Har 30 messages ke baad thoda extra rest taaki FloodWait na aaye)
         await asyncio.sleep(0.05)
         if index > 0 and index % 30 == 0:
             await asyncio.sleep(1.0)
@@ -260,4 +282,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
