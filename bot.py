@@ -110,8 +110,8 @@ async def send_welcome_content(context: ContextTypes.DEFAULT_TYPE, user_id: int,
 
         # 2 Buttons: Ek Green (success) aur ek Red (danger) animated icons ke sath
         keyboard = [
-            [styled_button("Download Vip Hack 📥", style="success", icon_custom_emoji_id=EMOJI_JOIN, callback_data="download_hack")],
-            [styled_button("Registration Link 🔗", style="danger", icon_custom_emoji_id=EMOJI_TOOL, url=REGISTRATION_LINK)]
+            [styled_button("Download Vip Hack ", style="success", icon_custom_emoji_id=EMOJI_JOIN, callback_data="download_hack")],
+            [styled_button("Registration Link ", style="danger", icon_custom_emoji_id=EMOJI_TOOL, url=REGISTRATION_LINK)]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
